@@ -75,6 +75,8 @@ class TextureRegionEditor : public AcceptDialog {
 	float draw_zoom = 0.0;
 	bool updating_scroll = false;
 
+	CanvasItem::TextureFilter filter; // matches object being edited, used at high scale factor
+
 	int snap_mode = 0;
 	Vector2 snap_offset;
 	Vector2 snap_step;

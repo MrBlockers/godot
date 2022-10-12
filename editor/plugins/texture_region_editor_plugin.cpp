@@ -30,6 +30,7 @@
 
 #include "texture_region_editor_plugin.h"
 
+#include "core/config/project_settings.h"
 #include "core/core_string_names.h"
 #include "core/input/input.h"
 #include "core/os/keyboard.h"
@@ -84,6 +85,13 @@ void TextureRegionEditor::_region_draw() {
 	Transform2D mtx;
 	mtx.columns[2] = -draw_ofs * draw_zoom;
 	mtx.scale_basis(Vector2(draw_zoom, draw_zoom));
+
+	if (draw_zoom > 4.0) {
+		edit_draw->set_texture_filter(filter);
+	} else {
+		int project_filter = GLOBAL_GET(SNAME("rendering/textures/canvas_textures/default_texture_filter"));
+		edit_draw->set_texture_filter((CanvasItem::TextureFilter)project_filter);
+	}
 
 	RS::get_singleton()->canvas_item_add_set_transform(edit_draw->get_canvas_item(), mtx);
 	edit_draw->draw_rect(Rect2(Point2(), base_tex->get_size()), Color(0.5, 0.5, 0.5, 0.5), false);
@@ -945,18 +953,46 @@ void TextureRegionEditor::_texture_changed() {
 	_edit_region();
 }
 
+static CanvasItem::TextureFilter convert_3d_filter(StandardMaterial3D::TextureFilter filter) {
+	switch(filter) {
+		case StandardMaterial3D::TextureFilter::TEXTURE_FILTER_NEAREST:
+			return CanvasItem::TextureFilter::TEXTURE_FILTER_NEAREST;
+		case StandardMaterial3D::TextureFilter::TEXTURE_FILTER_LINEAR:
+			return CanvasItem::TextureFilter::TEXTURE_FILTER_LINEAR;
+		case StandardMaterial3D::TextureFilter::TEXTURE_FILTER_NEAREST_WITH_MIPMAPS:
+			return CanvasItem::TextureFilter::TEXTURE_FILTER_NEAREST_WITH_MIPMAPS;
+		case StandardMaterial3D::TextureFilter::TEXTURE_FILTER_LINEAR_WITH_MIPMAPS:
+			return CanvasItem::TextureFilter::TEXTURE_FILTER_LINEAR_WITH_MIPMAPS;
+		case StandardMaterial3D::TextureFilter::TEXTURE_FILTER_NEAREST_WITH_MIPMAPS_ANISOTROPIC:
+			return CanvasItem::TextureFilter::TEXTURE_FILTER_NEAREST_WITH_MIPMAPS_ANISOTROPIC;
+		case StandardMaterial3D::TextureFilter::TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC:
+			return CanvasItem::TextureFilter::TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC;
+		default: 
+			return CanvasItem::TextureFilter::TEXTURE_FILTER_LINEAR; 
+	}
+}
+
 void TextureRegionEditor::_edit_region() {
+	int project_filter = GLOBAL_GET(SNAME("rendering/textures/canvas_textures/default_texture_filter"));
+
+	CanvasItem::TextureFilter detected_filter = (CanvasItem::TextureFilter)project_filter;
+
 	Ref<Texture2D> texture = nullptr;
 	if (atlas_tex.is_valid()) {
 		texture = atlas_tex->get_atlas();
+		// filter inapplicable to atlas textures
 	} else if (node_sprite_2d) {
 		texture = node_sprite_2d->get_texture();
+		detected_filter = node_sprite_2d->get_texture_filter();
 	} else if (node_sprite_3d) {
 		texture = node_sprite_3d->get_texture();
+		detected_filter = convert_3d_filter(node_sprite_3d->get_texture_filter());
 	} else if (node_ninepatch) {
 		texture = node_ninepatch->get_texture();
+		detected_filter = node_ninepatch->get_texture_filter();
 	} else if (obj_styleBox.is_valid()) {
 		texture = obj_styleBox->get_texture();
+		// filter inapplicable to stylebox textures
 	}
 
 	if (texture.is_null()) {
@@ -966,6 +1002,8 @@ void TextureRegionEditor::_edit_region() {
 		edit_draw->queue_redraw();
 		return;
 	}
+
+	filter = detected_filter;
 
 	if (cache_map.has(texture->get_rid())) {
 		autoslice_cache = cache_map[texture->get_rid()];
